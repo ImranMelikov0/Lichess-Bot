@@ -9,5 +9,30 @@
   "blunder_threshold_cp": 200,
   "use_stockfish_fallback": true,
   "challenge_humans": [],
-  "challenge_interval_seconds":1200
+  "challenge_interval_seconds": 1200,
+  "challenge_rated": false,
+  "challenge_declined_delay_seconds": 10,
+  "chat": {
+    "opening": [
+      "Merhaba ben Imran Melikovun satranç robotuyum",
+      "Kendisi daha güçlü oyunculari yenmekle meşgul olduğu için beni gönderdi",
+      "Kendimi şimdiden kazanacağım için tebrik ediyor sana da bol şans diyorum"
+    ],
+    "opponent_bad_move": "En iyi hamlen bu mu? Daha fazlasını beklemiyordum zaten",
+    "opponent_material_up": [
+      "Materyal öne geçerek beni yene bileceğini mi sanıyorsun?",
+      "Unutma bazen oyun sonunda 2 at kalsa bile berabere durumu vardır",
+      "Umarım oyun sonun iyidir berabere için şansın olur"
+    ],
+    "check": ["Şah!!!", "Şah", "Bir tane daha"],
+    "we_material_down": "Bunu beklemiyordum",
+    "we_won": ["İyi oyundu!", "Görüşürüz!"],
+    "we_lost": ["Keşke bol şans demeseydim", "Intikam zamanı tekrar var mısın?"],
+    "draw": ["Berabere kaldığın için şanslısın", "Berabere pek bana göre değil tekrar?"],
+    "we_material_up": "İşte şimdi başlıyoruz",
+    "position_good": "Senin için durum pek iyi gitmiyor tam da beklediğim gibi",
+    "position_bad": "Kazanacağını düşünmek yenilgiye sebep olabilir",
+    "middle_game_once": "Bana bakma oyununu oyna",
+    "opponent_captured_pawn": "İlk kanı sen akıttın oyun sonunda görüşürüz"
+  }
 }
