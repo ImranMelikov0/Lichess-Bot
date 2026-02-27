@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import threading
+import time
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 import requests
 
@@ -65,6 +67,46 @@ def get_my_bot_id() -> str:
     r.raise_for_status()
     data = r.json()
     return data["id"]
+
+
+def get_online_bots() -> List[Dict]:
+    """Çevrimiçi botların listesini al. Lichess /api/bot/online (NDJSON)."""
+    url = f"{LICHESS_API}/api/bot/online"
+    r = requests.get(url, headers=auth_headers())
+    r.raise_for_status()
+    bots = []
+    for line in r.text.strip().split("\n"):
+        if not line:
+            continue
+        try:
+            bots.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return bots
+
+
+def challenge_user(username: str, rated: bool = False, clock_limit: int = 180, clock_increment: int = 2) -> bool:
+    """
+    Belirtilen kullanıcıya meydan oku. Başarılı True döner.
+    """
+    url = f"{LICHESS_API}/api/challenge/{username}"
+    payload = {
+        "rated": str(rated).lower(),
+        "clock.limit": str(clock_limit),
+        "clock.increment": str(clock_increment),
+        "variant": "standard",
+        "color": "random",
+    }
+    r = requests.post(url, headers=json_headers(), data=payload)
+    if r.status_code == 200:
+        return True
+    try:
+        err = r.json()
+        msg = err.get("error", err.get("message", r.text[:150]))
+    except Exception:
+        msg = r.text[:150]
+    print(f"Meydan okuma hatası ({username}, status={r.status_code}): {msg}")
+    return False
 
 
 def stream_events():
@@ -186,21 +228,25 @@ def run_bot(config_path: Path) -> None:
     print(f"Bota oynamak için: https://lichess.org/@{my_id}  (sayfadan 'Meydan oku')")
     print("Lichess event stream dinleniyor...")
 
-    # İsteğe bağlı: otomatik olarak açık oyun (seek) aç.
-    # Örneğin her 60 saniyede bir 5+3 rapid seek'i:
-    import time
-
-    def auto_seek_loop() -> None:
+    def challenge_loop() -> None:
+        """Periyodik olarak çevrimiçi botlara meydan oku."""
         while True:
             try:
-                create_seek()
+                bots = get_online_bots()
+                others = [b for b in bots if b.get("id") != my_id]
+                if others:
+                    target = random.choice(others)
+                    target_id = target.get("id", "")
+                    if target_id and challenge_user(target_id, rated=False, clock_limit=180, clock_increment=2):
+                        print(f"Bot {target_id} adresine meydan okundu (3+2).")
+                else:
+                    print("Çevrimiçi başka bot yok, bekleniyor...")
             except Exception as exc:
-                print(f"Seek oluşturulurken hata: {exc}")
-            time.sleep(1200)
+                print(f"Meydan okuma hatası: {exc}")
+            time.sleep(1200)  # 1 dakikada bir dene
 
-    # Arka planda seek açan thread
-    seek_thread = threading.Thread(target=auto_seek_loop, daemon=True)
-    seek_thread.start()
+    challenge_thread = threading.Thread(target=challenge_loop, daemon=True)
+    challenge_thread.start()
 
     for event in stream_events():
         t = event.get("type")
@@ -209,8 +255,12 @@ def run_bot(config_path: Path) -> None:
         if t == "challenge":
             challenge = event["challenge"]
             ch_id = challenge["id"]
-            challenger = challenge.get("challenger", {}).get("id", "?")
-            print(f"Yeni challenge: {ch_id} (gönderen: {challenger}), kabul ediliyor...")
+            challenger_id = challenge.get("challenger", {}).get("id", "")
+            # Kendimiz meydan okuduysak kabul etme; karşı taraf kabul edince gameStart gelir
+            if challenger_id == my_id:
+                print(f"Kendi meydan okumamız ({ch_id}), karşı tarafın kabulünü bekliyoruz.")
+                continue
+            print(f"Yeni challenge: {ch_id} (gönderen: {challenger_id}), kabul ediliyor...")
             accept_challenge(ch_id)
 
         elif t == "gameStart":
@@ -220,58 +270,6 @@ def run_bot(config_path: Path) -> None:
                 target=stream_game, args=(game_id, engine, my_id), daemon=True
             )
             thread.start()
-
-
-def create_seek() -> None:
-    """
-    Botun lobby'de görünmesi veya oyun teklifi oluşturması.
-    Önce /api/board/seek dener (lobby'de seek); olmazsa /api/challenge/open (link).
-    """
-    # 1) Board seek: lobby'de "3+2 unrated" seek aç (bazı hesaplar için çalışır)
-    board_seek_url = f"{LICHESS_API}/api/board/seek"
-    params = {
-        "rated": "false",
-        "time": "3",       # dakika
-        "increment": "2",
-        "variant": "standard",
-        "color": "random",
-    }
-    r = requests.post(board_seek_url, headers=json_headers(), data=params)
-    if r.status_code == 200:
-        print("Lobby'de seek açıldı (3+2). Lichess Oyna sayfasında botun görünebilir.")
-        return
-
-    # 2) Open challenge: link döner; maç açmak için Lichess içinden bota meydan okumak daha garantili
-    url = f"{LICHESS_API}/api/challenge/open"
-    data = {
-        "rated": "false",
-        "clock.limit": "180",
-        "clock.increment": "2",
-        "variant": "standard",
-        "color": "random",
-    }
-    r = requests.post(url, headers=json_headers(), data=data)
-    if r.status_code != 200:
-        try:
-            err = r.json()
-            msg = err.get("error", err.get("message", r.text))
-        except Exception:
-            msg = r.text
-        raise RuntimeError(f"Seek oluşturulamadı (status={r.status_code}): {msg}")
-
-    out = r.json()
-    url_white = out.get("urlWhite")
-    url_black = out.get("urlBlack")
-    challenge_id = out.get("id", "")
-    if url_white or url_black:
-        print("Açık davet (3+2) linkleri oluşturuldu. Not: Link bazen açılmayabiliyor.")
-        print("En garantisi: Lichess'te bota gidip 'Meydan oku' ile maç aç.")
-        if url_white:
-            print(f"  Beyaz: {url_white}")
-        if url_black:
-            print(f"  Siyah: {url_black}")
-    else:
-        print(f"Açık davet oluşturuldu. Oyna: {LICHESS_API}/{challenge_id}")
 
 
 if __name__ == "__main__":

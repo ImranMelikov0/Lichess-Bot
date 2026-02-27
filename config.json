@@ -1,7 +1,7 @@
 {
   "model_path": "data/fen_stats.json",
   "stockfish_path": "/opt/homebrew/bin/stockfish",
-  "stockfish_depth": 8,
+  "stockfish_depth": 6,
   "use_stockfish_filter": true,
   "max_candidate_moves": 3,
   "blunder_threshold_cp": 200,
