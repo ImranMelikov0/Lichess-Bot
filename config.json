@@ -10,7 +10,7 @@
   "use_stockfish_fallback": true,
   "challenge_humans": [],
   "challenge_interval_seconds": 1200,
-  "challenge_rated": false,
+  "challenge_rated": true,
   "challenge_declined_delay_seconds": 15,
   "challenge_declined_rotate_after": 10,
   "chat": {
