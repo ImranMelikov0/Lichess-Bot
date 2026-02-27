@@ -224,26 +224,50 @@ def _play_if_our_turn(
 def run_bot(config_path: Path) -> None:
     engine = load_engine_from_config(config_path)
     my_id = get_my_bot_id()
+
+    # config.json'dan challenge ayarlarını oku
+    challenge_humans: List[str] = []
+    challenge_interval: int = 1200
+    try:
+        with config_path.open("r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        challenge_humans = [u.strip() for u in cfg.get("challenge_humans", []) if isinstance(u, str) and u.strip()]
+        challenge_interval = max(30, int(cfg.get("challenge_interval_seconds", 1200)))
+    except Exception:
+        pass
+
     print(f"YourStyleEngine yüklendi. Lichess id: {my_id}")
     print(f"Bota oynamak için: https://lichess.org/@{my_id}  (sayfadan 'Meydan oku')")
+    if challenge_humans:
+        print(f"İnsanlara meydan okuma listesi: {challenge_humans}")
+    print(f"Meydan okuma aralığı: {challenge_interval} saniye ({challenge_interval // 60} dakika)")
     print("Lichess event stream dinleniyor...")
 
     def challenge_loop() -> None:
-        """Periyodik olarak çevrimiçi botlara meydan oku."""
+        """Periyodik olarak botlara ve challenge_humans listesindeki insanlara meydan oku."""
         while True:
             try:
+                targets: List[str] = []
+
+                # İnsan listesinden rastgele biri
+                if challenge_humans:
+                    targets.append(random.choice(challenge_humans))
+
+                # Çevrimiçi botlardan rastgele biri
                 bots = get_online_bots()
-                others = [b for b in bots if b.get("id") != my_id]
+                others = [b.get("id") for b in bots if b.get("id") and b.get("id") != my_id]
                 if others:
-                    target = random.choice(others)
-                    target_id = target.get("id", "")
-                    if target_id and challenge_user(target_id, rated=False, clock_limit=180, clock_increment=2):
-                        print(f"Bot {target_id} adresine meydan okundu (3+2).")
+                    targets.append(random.choice(others))
+
+                if targets:
+                    target = random.choice(targets)
+                    if challenge_user(target, rated=False, clock_limit=180, clock_increment=2):
+                        print(f"{target} adresine meydan okundu (3+2).")
                 else:
-                    print("Çevrimiçi başka bot yok, bekleniyor...")
+                    print("Hedef yok (bot veya insan listesi boş), bekleniyor...")
             except Exception as exc:
                 print(f"Meydan okuma hatası: {exc}")
-            time.sleep(1200)  # 1 dakikada bir dene
+            time.sleep(challenge_interval)
 
     challenge_thread = threading.Thread(target=challenge_loop, daemon=True)
     challenge_thread.start()

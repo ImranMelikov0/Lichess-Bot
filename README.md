@@ -149,6 +149,33 @@ Bot:
 
 ---
 
+---
+pgnleri her ay eklemek usulu
+her ay tarihi filtrele son oyunlari indir data/pgns kismina ekle sonra 
+asagidakileri calistir veya toplu sekilde tek pgn indir asagidakilardan birini calistir
+
+
+insanlara karsi istek gondermesi icin boyle olmasi gerek
+
+"challenge_humans": ["arkadas1", "arkadas2", "imranmelikov"]
+
+
+- ```bash
+  cd /Users/imranmelikov/Desktop/myengine
+  source .venv/bin/activate
+    ```
+
+- # Tek dosya:
+```bash
+  python trainer.py data/pgns/lichess_feb2026.pgn -o data/fen_stats.json
+```
+
+- # Veya klasördeki tüm PGN'ler (eski + yeni):
+ ```bash
+    python trainer.py data/pgns -o data/fen_stats.json
+ ```
+---
+
 ## Özet kullanım
 
 1. PGN'leri `data/` altına koy

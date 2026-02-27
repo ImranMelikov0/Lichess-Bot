@@ -16,6 +16,9 @@ class YourStyleEngineConfig:
     model_path: Path
     stockfish_path: Optional[Path] = None
     stockfish_depth: int = 12
+    # Oyun sonunda (az taş kaldığında) daha yüksek derinlik
+    stockfish_endgame_depth: int = 20
+    endgame_piece_count: int = 10  # Bu sayıdan az taş varsa oyun sonu sayılır
     # Stockfish'i sadece "blunder filtresi" olarak kullan
     use_stockfish_filter: bool = True
     # Senin en çok oynadığın ilk kaç hamleyi kontrol edelim
@@ -23,8 +26,6 @@ class YourStyleEngineConfig:
     # En iyi hamleden kaç centipawn daha kötü olursa blunder sayalım
     blunder_threshold_cp: int = 200
     # Modelde hiç veri olmayan konumlarda Stockfish'e tamamen güvenelim mi?
-    # True: bilinmeyen konumlarda motor gibi oynar (daha güçlü),
-    # False: rastgele yasal hamle seçer (daha zayıf ama daha "insan").
     use_stockfish_fallback: bool = True
 
 
@@ -106,15 +107,14 @@ class YourStyleEngine:
         scored = []
         our_color = board.turn
 
+        depth = self._stockfish_depth_for_position(board)
         for move, count in to_eval:
             tmp_board = board.copy(stack=False)
             tmp_board.push(move)
             try:
                 info = self.engine.analyse(
                     tmp_board,
-                    chess.engine.Limit(
-                        depth=max(4, self.config.stockfish_depth // 2)
-                    ),
+                    chess.engine.Limit(depth=max(4, depth // 2)),
                 )
                 score_obj = info.get("score")
                 if score_obj is None:
@@ -145,12 +145,23 @@ class YourStyleEngine:
         best_move, _, _ = max(filtered, key=lambda mcs: mcs[1])
         return best_move
 
+    def _piece_count(self, board: chess.Board) -> int:
+        """Tahtadaki toplam taş sayısı."""
+        return sum(1 for _ in board.piece_map().values())
+
+    def _stockfish_depth_for_position(self, board: chess.Board) -> int:
+        """Oyun sonunda daha yüksek derinlik kullan."""
+        if self._piece_count(board) <= self.config.endgame_piece_count:
+            return self.config.stockfish_endgame_depth
+        return self.config.stockfish_depth
+
     def _from_stockfish(self, board: chess.Board) -> Optional[chess.Move]:
         if self.engine is None:
             return None
+        depth = self._stockfish_depth_for_position(board)
         try:
             result = self.engine.play(
-                board, chess.engine.Limit(depth=self.config.stockfish_depth)
+                board, chess.engine.Limit(depth=depth)
             )
             return result.move
         except Exception:
@@ -175,6 +186,8 @@ def load_engine_from_config(config_path: Path) -> YourStyleEngine:
     stockfish_path_str = data.get("stockfish_path")
     stockfish_path = Path(stockfish_path_str) if stockfish_path_str else None
     depth = int(data.get("stockfish_depth", 12))
+    endgame_depth = int(data.get("stockfish_endgame_depth", 20))
+    endgame_pieces = int(data.get("endgame_piece_count", 10))
     use_stockfish_filter = bool(data.get("use_stockfish_filter", True))
     max_candidate_moves = int(data.get("max_candidate_moves", 3))
     blunder_threshold_cp = int(data.get("blunder_threshold_cp", 200))
@@ -185,6 +198,8 @@ def load_engine_from_config(config_path: Path) -> YourStyleEngine:
             model_path=model_path,
             stockfish_path=stockfish_path,
             stockfish_depth=depth,
+            stockfish_endgame_depth=endgame_depth,
+            endgame_piece_count=endgame_pieces,
             use_stockfish_filter=use_stockfish_filter,
             max_candidate_moves=max_candidate_moves,
             blunder_threshold_cp=blunder_threshold_cp,
