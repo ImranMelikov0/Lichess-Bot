@@ -208,21 +208,33 @@ def make_move(game_id: str, move_uci: str) -> None:
 
 def _load_rotation_index() -> int:
     """Kaydedilmiş rotasyon indeksini yükle."""
+    idx, _ = _load_challenge_state()
+    return idx
+
+
+def _load_challenge_state() -> Tuple[int, int]:
+    """Rotasyon indeksi ve declined_count'u yükle. Yeniden başlamada kaldığı yerden devam eder."""
     try:
         if ROTATION_STATE_FILE.exists():
             data = json.loads(ROTATION_STATE_FILE.read_text(encoding="utf-8"))
-            return int(data.get("index", 0))
+            return int(data.get("index", 0)), int(data.get("declined_count", 0))
     except Exception:
         pass
-    return 0
+    return 0, 0
 
 
 def _save_rotation_index(idx: int) -> None:
     """Rotasyon indeksini kaydet."""
+    _, declined = _load_challenge_state()
+    _save_challenge_state(idx, declined)
+
+
+def _save_challenge_state(idx: int, declined_count: int) -> None:
+    """Rotasyon indeksi ve declined_count'u kaydet."""
     try:
         ROTATION_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         ROTATION_STATE_FILE.write_text(
-            json.dumps({"index": idx}, ensure_ascii=False),
+            json.dumps({"index": idx, "declined_count": declined_count}, ensure_ascii=False),
             encoding="utf-8",
         )
     except Exception:
@@ -334,12 +346,12 @@ def get_current_challenge_config() -> Tuple[str, int, int, str, int]:
 
 
 def advance_challenge_rotation() -> None:
-    """Rotasyonu ileri al. Oyun kabul edilip oynandıktan sonra çağrılır."""
+    """Rotasyonu ileri al. Oyun kabul edilip oynandıktan sonra veya N red sonrası çağrılır."""
     if not hasattr(_get_rotation_index, "_idx"):
         _get_rotation_index._idx = _load_rotation_index()  # type: ignore
     next_idx = _get_rotation_index._idx + 1  # type: ignore
     _get_rotation_index._idx = next_idx  # type: ignore
-    _save_rotation_index(next_idx)
+    _save_challenge_state(next_idx, 0)
 
 
 # Materyal değerleri (centipawn yaklaşık)
@@ -877,6 +889,7 @@ def run_bot(config_path: Path) -> None:
     challenge_interval: int = 1200
     challenge_rated: bool = False
     challenge_declined_delay: int = 60
+    challenge_declined_rotate_after: int = 10
     chat_config: Dict[str, object] = {}
     try:
         with config_path.open("r", encoding="utf-8") as f:
@@ -885,11 +898,13 @@ def run_bot(config_path: Path) -> None:
         challenge_interval = max(30, int(cfg.get("challenge_interval_seconds", 1200)))
         challenge_rated = bool(cfg.get("challenge_rated", False))
         challenge_declined_delay = max(15, int(cfg.get("challenge_declined_delay_seconds", 20)))
+        challenge_declined_rotate_after = max(1, int(cfg.get("challenge_declined_rotate_after", 10)))
         chat_config = _load_chat_config(cfg.get("chat", {}))
     except Exception:
         pass
 
     # Declined'da hemen tekrar; kabul sonrası 20 dk bekle
+    _, declined_count = _load_challenge_state()
     pending_challenge_id: Optional[str] = None
     retry_immediately = threading.Event()
     next_challenge_time: float = 0.0
@@ -899,7 +914,7 @@ def run_bot(config_path: Path) -> None:
     print(f"Bota oynamak için: https://lichess.org/@{my_id}  (sayfadan 'Meydan oku')")
     if challenge_humans:
         print(f"İnsanlara meydan okuma listesi: {challenge_humans}")
-    print(f"Meydan okuma aralığı: {challenge_interval} sn (kabul sonrası); declined'da {challenge_declined_delay} sn bekle")
+    print(f"Meydan okuma aralığı: {challenge_interval} sn (kabul sonrası); declined'da {challenge_declined_delay} sn bekle; {challenge_declined_rotate_after} red sonrası tür değişir")
     print(f"Meydan okuma türü: {'Puanlı' if challenge_rated else 'Puansız'}")
     print("Lichess event stream dinleniyor...")
 
@@ -908,6 +923,11 @@ def run_bot(config_path: Path) -> None:
         while True:
             try:
                 now = time.time()
+                with challenge_lock:
+                    has_pending = bool(pending_challenge_id)
+                if has_pending:
+                    retry_immediately.wait(timeout=5)
+                    continue
                 if now < next_challenge_time:
                     wait = min(5, next_challenge_time - now)
                     retry_immediately.wait(timeout=wait)
@@ -963,7 +983,13 @@ def run_bot(config_path: Path) -> None:
             decl_id = decl.get("id", "")
             with challenge_lock:
                 if decl_id and decl_id == pending_challenge_id:
-                    print(f"Meydan okumamız reddedildi ({decl_id}), {challenge_declined_delay} sn sonra tekrar.")
+                    declined_count += 1
+                    _save_challenge_state(_get_rotation_index(), declined_count)
+                    print(f"Meydan okumamız reddedildi ({decl_id}) [{declined_count}/{challenge_declined_rotate_after}], {challenge_declined_delay} sn sonra tekrar.")
+                    if declined_count >= challenge_declined_rotate_after:
+                        advance_challenge_rotation()
+                        declined_count = 0
+                        print(f"  → {challenge_declined_rotate_after} red, sıradaki meydan okuma türüne geçildi.")
                     next_challenge_time = time.time() + challenge_declined_delay
                     retry_immediately.set()
                     pending_challenge_id = None
@@ -973,6 +999,7 @@ def run_bot(config_path: Path) -> None:
             with challenge_lock:
                 if pending_challenge_id:
                     advance_challenge_rotation()
+                    declined_count = 0
                     pending_challenge_id = None
                     next_challenge_time = time.time() + challenge_interval
             print(f"Oyun başladı: {game_id}")
