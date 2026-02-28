@@ -14,7 +14,8 @@
   "challenge_declined_delay_seconds": 120,
   "challenge_declined_rotate_after": 10,
   "challenge_failed_delay_seconds": 60,
-  "max_concurrent_games": 2,
+  "max_concurrent_games": 1,
+  "challenge_pending_timeout_seconds": 300,
   "chat": {
     "opening": [
       "Merhaba ben Imran Melikovun satranç robotuyum",
