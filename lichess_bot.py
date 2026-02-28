@@ -43,8 +43,8 @@ CHALLENGE_ROTATION = [
     ("rapid", 900, 10, "standard", 0),
     ("classical", 1800, 0, "standard", 0),
     ("classical", 1800, 20, "standard", 0),
-    ("classical", 3600, 20, "standard", 0),   # 1 saat + 20
-    ("classical", 7200, 20, "standard", 0),   # 2 saat + 20
+    # ("classical", 3600, 20, "standard", 0),   # 1 saat + 20
+    # ("classical", 7200, 20, "standard", 0),   # 2 saat + 20
     ("chess960", 180, 2, "chess960", 0),
     ("chess960", 180, 0, "chess960", 0),
     ("chess960", 300, 3, "chess960", 0),
@@ -53,9 +53,9 @@ CHALLENGE_ROTATION = [
     ("chess960", 900, 10, "chess960", 0),
     ("chess960", 1800, 0, "chess960", 0),
     ("chess960", 1800, 20, "chess960", 0),
-    ("chess960", 3600, 20, "chess960", 0),
-    ("chess960", 7200, 20, "chess960", 0),
-    ("correspondence", 0, 0, "standard", 1),
+    # ("chess960", 3600, 20, "chess960", 0),
+    # ("chess960", 7200, 20, "chess960", 0),
+    # ("correspondence", 0, 0, "standard", 1),
 ]
 
 
@@ -232,6 +232,16 @@ def stream_events():
                 yield json.loads(line.decode("utf-8"))
         finally:
             r.close()
+
+
+def decline_challenge(challenge_id: str, reason: str = "") -> bool:
+    """Challenge'ı reddet. Başarılı True, hata False döner."""
+    url = f"{LICHESS_API}/api/challenge/{challenge_id}/decline"
+    try:
+        r = requests.post(url, headers=json_headers(), data={"reason": reason[:140]} if reason else {})
+        return r.status_code == 200
+    except Exception:
+        return False
 
 
 def accept_challenge(challenge_id: str) -> bool:
@@ -968,7 +978,9 @@ def run_bot(config_path: Path) -> None:
     challenge_interval: int = 1200
     challenge_rated: bool = False
     challenge_declined_delay: int = 60
+    challenge_failed_delay: int = 30
     challenge_declined_rotate_after: int = 10
+    max_concurrent_games: int = 2
     chat_config: Dict[str, object] = {}
     try:
         with config_path.open("r", encoding="utf-8") as f:
@@ -977,7 +989,9 @@ def run_bot(config_path: Path) -> None:
         challenge_interval = max(30, int(cfg.get("challenge_interval_seconds", 1200)))
         challenge_rated = bool(cfg.get("challenge_rated", False))
         challenge_declined_delay = max(15, int(cfg.get("challenge_declined_delay_seconds", 20)))
+        challenge_failed_delay = max(15, int(cfg.get("challenge_failed_delay_seconds", 30)))
         challenge_declined_rotate_after = max(1, int(cfg.get("challenge_declined_rotate_after", 10)))
+        max_concurrent_games = max(1, int(cfg.get("max_concurrent_games", 2)))
         chat_config = _load_chat_config(cfg.get("chat", {}))
     except Exception:
         pass
@@ -988,13 +1002,16 @@ def run_bot(config_path: Path) -> None:
     retry_immediately = threading.Event()
     next_challenge_time: float = 0.0
     challenge_lock = threading.Lock()
+    active_game_count = 0
+    active_games_lock = threading.Lock()
 
     print(f"YourStyleEngine yüklendi. Lichess id: {my_id}")
     print(f"Bota oynamak için: https://lichess.org/@{my_id}  (sayfadan 'Meydan oku')")
     if challenge_humans:
         print(f"İnsanlara meydan okuma listesi: {challenge_humans}")
-    print(f"Meydan okuma aralığı: {challenge_interval} sn (kabul sonrası); declined'da {challenge_declined_delay} sn bekle; {challenge_declined_rotate_after} red sonrası tür değişir")
+    print(f"Meydan okuma aralığı: {challenge_interval} sn (kabul sonrası); declined'da {challenge_declined_delay} sn; başarısızda {challenge_failed_delay} sn bekle; {challenge_declined_rotate_after} red sonrası tür değişir")
     print(f"Meydan okuma türü: {'Puanlı' if challenge_rated else 'Puansız'}")
+    print(f"Eşzamanlı oyun limiti: {max_concurrent_games}")
     print("Lichess event stream dinleniyor...")
 
     def challenge_loop() -> None:
@@ -1007,6 +1024,10 @@ def run_bot(config_path: Path) -> None:
                 if has_pending:
                     retry_immediately.wait(timeout=5)
                     continue
+                with active_games_lock:
+                    if active_game_count >= max_concurrent_games:
+                        retry_immediately.wait(timeout=10)
+                        continue
                 if now < next_challenge_time:
                     wait = min(5, next_challenge_time - now)
                     retry_immediately.wait(timeout=wait)
@@ -1035,10 +1056,10 @@ def run_bot(config_path: Path) -> None:
                     tc = f"{clk//60}+{inc}" if d == 0 else f"{d}g"
                     print(f"{target} → {name} ({tc} {var})")
                 else:
-                    time.sleep(30)
+                    time.sleep(challenge_failed_delay)
             except Exception as exc:
                 print(f"Meydan okuma hatası: {exc}")
-                time.sleep(30)
+                time.sleep(challenge_failed_delay)
 
     challenge_thread = threading.Thread(target=challenge_loop, daemon=True)
     challenge_thread.start()
@@ -1056,6 +1077,11 @@ def run_bot(config_path: Path) -> None:
                     if challenger_id == my_id:
                         print(f"Kendi meydan okumamız ({ch_id}), karşı tarafın kabulünü bekliyoruz.")
                         continue
+                    with active_games_lock:
+                        if active_game_count >= max_concurrent_games:
+                            decline_challenge(ch_id, "Çok fazla eşzamanlı oyun")
+                            print(f"Challenge {ch_id} reddedildi (eşzamanlı oyun limiti: {max_concurrent_games})")
+                            continue
                     print(f"Yeni challenge: {ch_id} (gönderen: {challenger_id}), kabul ediliyor...")
                     accept_challenge(ch_id)
 
@@ -1092,12 +1118,19 @@ def run_bot(config_path: Path) -> None:
                             declined_count = 0
                             pending_challenge_id = None
                             next_challenge_time = time.time() + challenge_interval
-                    print(f"Oyun başladı: {game_id}")
-                    thread = threading.Thread(
-                        target=stream_game,
-                        args=(game_id, engine, my_id, chat_config),
-                        daemon=True,
-                    )
+                    with active_games_lock:
+                        active_game_count += 1
+
+                    def run_game_then_decrement():
+                        nonlocal active_game_count
+                        try:
+                            stream_game(game_id, engine, my_id, chat_config)
+                        finally:
+                            with active_games_lock:
+                                active_game_count -= 1
+
+                    print(f"Oyun başladı: {game_id} (aktif: {active_game_count}/{max_concurrent_games})")
+                    thread = threading.Thread(target=run_game_then_decrement, daemon=True)
                     thread.start()
         except Exception as e:
             print(f"Event stream hatası: {e}, 2 dk sonra yeniden bağlanılıyor...")
