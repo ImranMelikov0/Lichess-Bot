@@ -1030,6 +1030,7 @@ def run_bot(config_path: Path) -> None:
     def challenge_loop() -> None:
         nonlocal pending_challenge_id, pending_challenge_time, next_challenge_time
         while True:
+            time.sleep(1)  # Boşta CPU tüketimini önle
             try:
                 now = time.time()
                 with challenge_lock:
