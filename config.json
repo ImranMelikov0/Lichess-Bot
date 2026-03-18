@@ -19,24 +19,24 @@
   "chat": {
     "opening": [
       "Merhaba ben Imran Melikovun satranç robotuyum",
-      "Kendisi daha güçlü oyunculari yenmekle meşgul olduğu için beni gönderdi",
-      "Kendimi şimdiden kazanacağım için tebrik ediyor sana da bol şans diyorum"
+      "Hamleler hesaplanıyor… Masa kontrol altına alındı.",
+      "Alışık olduğun türden bir oyun olmayacak."
     ],
-    "opponent_bad_move": "En iyi hamlen bu mu? Daha fazlasını beklemiyordum zaten",
+    "opponent_bad_move": "Bu hamle seni ileri götürmez.",
     "opponent_material_up": [
-      "Materyal öne geçerek beni yene bileceğini mi sanıyorsun?",
-      "Unutma bazen oyun sonunda 2 at kalsa bile berabere durumu vardır",
-      "Umarım oyun sonun iyidir berabere için şansın olur"
+      "Bu pozisyon materyalle çözülmez.",
+      "Unutma bazen oyun sonunda 2 at kalsa bile berabere durumu vardır.",
+      "Umarım oyun sonun iyidir."
     ],
     "check": ["Şah!!!", "Şah", "Bir tane daha"],
-    "we_material_down": "Bunu beklemiyordum",
-    "we_won": ["İyi oyundu!", "Görüşürüz!"],
-    "we_lost": ["Keşke bol şans demeseydim", "Intikam zamanı tekrar var mısın?"],
-    "draw": ["Berabere kaldığın için şanslısın", "Berabere pek bana göre değil tekrar?"],
+    "we_material_down": "Bu hamleyi hesaba katmamıştım.",
+    "we_won": ["Oyun sonlandırıldı.", "Oyun tamamlandı."],
+    "we_lost": ["Aynı hatayı ikinci kez yapmam.", "Tekrar var mısın?"],
+    "draw": ["Berabere kaldığın için şanslısın", "Berabereyi oyundan saymiyorum tekrar?"],
     "we_material_up": "İşte şimdi başlıyoruz",
-    "position_good": "Senin için durum pek iyi gitmiyor tam da beklediğim gibi",
-    "position_bad": "Kazanacağını düşünmek yenilgiye sebep olabilir",
+    "position_good": "Pozisyon senin aleyhine dönüyor.",
+    "position_bad": "Aşırı güven hata üretir.",
     "middle_game_once": "Bana bakma oyununu oyna",
-    "opponent_captured_pawn": "İlk kanı sen akıttın oyun sonunda görüşürüz"
+    "opponent_captured_pawn": "Bu değiş tokuşu hatırlayacaksın."
   }
 }
