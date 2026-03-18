@@ -196,4 +196,9 @@ insanlara karsi istek gondermesi icin boyle olmasi gerek
    ```bash
    python lichess_bot.py
    ```
+   
+  ## botu baslatmak ve baglanti sonrasi kopmayi onlemek icin komut
+## while true; do cd ~/lichessbot && source .venv/bin/activate && python3 lichess_bot.py; echo "Bot durdu, 10 sn sonra yeniden başlatılıyor..."; sleep 10; done
+
+
 
