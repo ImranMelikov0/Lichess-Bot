@@ -285,6 +285,10 @@ def make_move(game_id: str, move_uci: str) -> None:
             print(f"[Rate limit] Hamle 429 (game={game_id}), {wait} sn ({wait//60} dk) bekleniyor...")
             time.sleep(wait)
             continue
+        if r.status_code == 400:
+            # Oyun bitmiş veya hamle geçersiz (örn. Chess960) - sessizce geç
+            print(f"[{game_id}] Hamle {move_uci} 400 (oyun bitti veya geçersiz hamle), atlanıyor.")
+            return
         r.raise_for_status()
         return
     raise RuntimeError(f"Hamle gönderilemedi (game={game_id}): Rate limit aşıldı")

@@ -9,7 +9,7 @@
   "blunder_threshold_cp": 200,
   "use_stockfish_fallback": true,
   "challenge_humans": [],
-  "challenge_interval_seconds": 1200,
+  "challenge_interval_seconds": 1800,
   "challenge_rated": true,
   "challenge_declined_delay_seconds": 120,
   "challenge_declined_rotate_after": 10,
