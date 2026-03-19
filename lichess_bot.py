@@ -278,7 +278,7 @@ def accept_challenge(challenge_id: str) -> bool:
 
 def make_move(game_id: str, move_uci: str) -> None:
     url = f"{LICHESS_API}/api/bot/game/{game_id}/move/{move_uci}"
-    for attempt in range(5):
+    for attempt in range(10):
         r = requests.post(url, headers=auth_headers())
         if r.status_code == 429:
             wait = _rate_limit_wait_seconds(r, attempt)
