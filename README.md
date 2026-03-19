@@ -201,4 +201,8 @@ insanlara karsi istek gondermesi icin boyle olmasi gerek
 ## while true; do cd ~/lichessbot && source .venv/bin/activate && python3 lichess_bot.py; echo "Bot durdu, 10 sn sonra yeniden başlatılıyor..."; sleep 10; done
 
 
+## VMde config dosyasini saklayarak deyisiklikleri githubdan cekmek
+```bash
+    git stash push -m "vm config" config.json && git pull && git stash pop
+```
 
