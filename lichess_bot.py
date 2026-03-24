@@ -30,6 +30,10 @@ LICHESS_API = "https://lichess.org"
 ROTATION_STATE_FILE = Path("data/challenge_rotation.json")
 CHAT_STATE_FILE = Path("data/chat_state.json")
 
+# Meydan okuma 429 backoff: farklı hedeflere geçince sıfırlanmasın diye global sayaç
+_challenge_rate_limit_attempt: int = 0
+_challenge_rate_limit_lock: threading.Lock = threading.Lock()
+
 # Meydan okuma rotasyonu: (isim, clock_limit, clock_increment, variant, days)
 # classical: 30+0, 30+20, 60+20, 120+20 | chess960: blitz + rapid + classical
 CHALLENGE_ROTATION = [
@@ -166,16 +170,22 @@ def challenge_user(
     else:
         payload["clock.limit"] = str(clock_limit)
         payload["clock.increment"] = str(clock_increment)
+    global _challenge_rate_limit_attempt
     for attempt in range(5):
         r = requests.post(url, headers=json_headers(), data=payload)
         if r.status_code == 200:
+            with _challenge_rate_limit_lock:
+                _challenge_rate_limit_attempt = 0  # Başarıda sıfırla
             try:
                 data = r.json()
                 return str(data.get("challenge", {}).get("id") or data.get("id") or "")
             except Exception:
                 return ""
         if r.status_code == 429:
-            wait = _rate_limit_wait_seconds(r, attempt)
+            with _challenge_rate_limit_lock:
+                effective_attempt = _challenge_rate_limit_attempt
+                _challenge_rate_limit_attempt += 1
+            wait = _rate_limit_wait_seconds(r, effective_attempt)
             print(f"[Rate limit] Meydan okuma 429, {wait} sn ({wait//60} dk) bekleniyor...")
             time.sleep(wait)
             continue
